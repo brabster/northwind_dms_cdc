@@ -59,15 +59,15 @@ Resources:
       Parameters:
          rds.logical_replication: 1
          wal_sender_timeout: 0
-         shared_preload_libraries:
-          - pg_stat_statements
-          - pglogical
+         shared_preload_libraries: pg_stat_statements,pglogical
 
   DatabaseSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
     Properties:
+      DBSubnetGroupDescription: RDS-DMS
       SubnetIds:
-        - !Ref DatabaseSubnet
+        - !Ref DatabaseSubnet1
+        - !Ref DatabaseSubnet2
   
   DatabaseVPC:
     Type: AWS::EC2::VPC
@@ -76,15 +76,23 @@ Resources:
       EnableDnsSupport: 'true'
       EnableDnsHostnames: 'true'
 
-  DatabaseSubnet:
+  DatabaseSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref DatabaseVPC
       CidrBlock: 10.0.0.0/24
       AvailabilityZone: us-east-1a
+  
+  DatabaseSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref DatabaseVPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: us-east-1b
 
   DatabaseSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
+      GroupDescription: For RDS-DMS and Query Editor
       VpcId: !Ref DatabaseVPC
     
