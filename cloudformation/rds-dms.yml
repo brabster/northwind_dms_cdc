@@ -22,6 +22,24 @@ Parameters:
 
 Resources:
 
+  DmsVpcRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: dms-vpc-role
+      Description: Must exist and be called this name for DMS to work https://docs.aws.amazon.com/managedservices/latest/ctref/deployment-advanced-database-migration-service-dms-create-replication-subnet-group.html
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - dms.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonDMSVPCManagementRole
+   
+
   DatabaseCluster:
     Type: AWS::RDS::DBCluster
     Properties:
@@ -68,12 +86,31 @@ Resources:
       EnableDnsSupport: 'true'
       EnableDnsHostnames: 'true'
   
+  DatabaseVPCRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref DatabaseVPC
+  
   DatabaseSecurityGroup:
     Type: AWS::EC2::SecurityGroup
     Properties:
       GroupDescription: For RDS-DMS and Query Editor
       VpcId: !Ref DatabaseVPC
 
+  DatabaseSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref DatabaseSecurityGroup
+      IpProtocol: -1
+      SourceSecurityGroupId: !Ref DatabaseSecurityGroup
+
+  DatabaseSecurityGroupEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref DatabaseSecurityGroup
+      IpProtocol: -1
+      CidrIp: 0.0.0.0/0
+        
   DatabaseSubnet1:
     Type: AWS::EC2::Subnet
     Properties:
@@ -81,12 +118,24 @@ Resources:
       CidrBlock: 10.0.0.0/24
       AvailabilityZone: us-east-1a
   
+  DatabaseSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref DatabaseVPCRouteTable
+      SubnetId: !Ref DatabaseSubnet1
+  
   DatabaseSubnet2:
     Type: AWS::EC2::Subnet
     Properties:
       VpcId: !Ref DatabaseVPC
       CidrBlock: 10.0.1.0/24
       AvailabilityZone: us-east-1b
+  
+  DatabaseSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref DatabaseVPCRouteTable
+      SubnetId: !Ref DatabaseSubnet2
 
   DatabaseSubnetGroup:
     Type: AWS::RDS::DBSubnetGroup
@@ -104,8 +153,17 @@ Resources:
       EngineName: aurora-postgresql
       Username: !Ref Username
       Password: !Ref Password
-      Port: !GetAtt DatabaseCluster.Endpoint.Port
-      ServerName: !GetAtt DatabaseCluster.Endpoint.Address
+      Port: !GetAtt DatabaseInstance.Endpoint.Port
+      ServerName: !GetAtt DatabaseInstance.Endpoint.Address
+
+  S3VpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: Gateway
+      ServiceName: com.amazonaws.us-east-1.s3
+      VpcId: !Ref DatabaseVPC
+      RouteTableIds:
+        - !Ref DatabaseVPCRouteTable
 
   DmsS3Target:
     Type: AWS::S3::Bucket
