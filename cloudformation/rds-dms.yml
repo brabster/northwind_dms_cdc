@@ -23,7 +23,7 @@ Parameters:
 Resources:
 
   DatabaseCluster:
-    Type: 'AWS::RDS::DBCluster'
+    Type: AWS::RDS::DBCluster
     Properties:
       MasterUsername:
         Ref: Username
@@ -61,20 +61,18 @@ Resources:
          wal_sender_timeout: 0
          shared_preload_libraries: pg_stat_statements,pglogical
 
-  DatabaseSubnetGroup:
-    Type: AWS::RDS::DBSubnetGroup
-    Properties:
-      DBSubnetGroupDescription: RDS-DMS
-      SubnetIds:
-        - !Ref DatabaseSubnet1
-        - !Ref DatabaseSubnet2
-  
   DatabaseVPC:
     Type: AWS::EC2::VPC
     Properties:
       CidrBlock: 10.0.0.0/16
       EnableDnsSupport: 'true'
       EnableDnsHostnames: 'true'
+  
+  DatabaseSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: For RDS-DMS and Query Editor
+      VpcId: !Ref DatabaseVPC
 
   DatabaseSubnet1:
     Type: AWS::EC2::Subnet
@@ -90,9 +88,114 @@ Resources:
       CidrBlock: 10.0.1.0/24
       AvailabilityZone: us-east-1b
 
-  DatabaseSecurityGroup:
-    Type: AWS::EC2::SecurityGroup
+  DatabaseSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
     Properties:
-      GroupDescription: For RDS-DMS and Query Editor
-      VpcId: !Ref DatabaseVPC
-    
+      DBSubnetGroupDescription: RDS-DMS
+      SubnetIds:
+        - !Ref DatabaseSubnet1
+        - !Ref DatabaseSubnet2
+  
+  DmsSourceEndpoint:
+    Type: AWS::DMS::Endpoint
+    Properties: 
+      DatabaseName: northwind
+      EndpointType: source
+      EngineName: aurora-postgresql
+      Username: !Ref Username
+      Password: !Ref Password
+      Port: !GetAtt DatabaseCluster.Endpoint.Port
+      ServerName: !GetAtt DatabaseCluster.Endpoint.Address
+
+  DmsS3Target:
+    Type: AWS::S3::Bucket
+
+  DmsTargetRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: DMS access to S3 target bucket
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - dms.us-east-1.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies: 
+        - PolicyName: bucket
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: s3:*
+                Resource: !GetAtt DmsS3Target.Arn
+      
+  DmsTargetEndpoint:
+    Type: AWS::DMS::Endpoint
+    Properties:
+      EndpointType: target
+      EngineName: s3
+      S3Settings:
+        ServiceAccessRoleArn: !GetAtt DmsTargetRole.Arn
+        BucketName: !Ref DmsS3Target
+        BucketFolder: cdc
+        IncludeOpForFullLoad: true
+        TimestampColumnName: transaction_commit_timestamp
+
+  ReplicationSubnetGroup:
+    Type: AWS::DMS::ReplicationSubnetGroup
+    Properties: 
+      ReplicationSubnetGroupDescription: rds-dms
+      SubnetIds: 
+        - !Ref DatabaseSubnet1
+        - !Ref DatabaseSubnet2
+
+  ReplicationConfig:
+    Type: AWS::DMS::ReplicationConfig
+    Properties:
+      ComputeConfig: 
+          MaxCapacityUnits: 1
+          MinCapacityUnits: 1
+          MultiAZ: 'false'
+          ReplicationSubnetGroupId: !Ref ReplicationSubnetGroup
+          VpcSecurityGroupIds: 
+            - !Ref DatabaseSecurityGroup
+      ReplicationConfigIdentifier: rds-dms
+      ReplicationType: full-load-and-cdc
+      SourceEndpointArn: !Ref DmsSourceEndpoint
+      TargetEndpointArn: !Ref DmsTargetEndpoint
+      TableMappings: {
+        "rules": [
+          {
+            "rule-type": "selection",
+            "rule-id": "1",
+            "rule-name": "1",
+            "object-locator": {
+              "schema-name": "public",
+              "table-name": "%"
+            },
+            "rule-action": "include",
+            "filters": []
+          },
+          {
+            "rule-type": "transformation",
+            "rule-id": "2",
+            "rule-name": "2",
+            "rule-target": "column",
+            "object-locator": {
+                "schema-name": "%",
+                "table-name": "%"
+            },
+            "rule-action": "add-column",
+            "value": "transaction_sequence_number",
+            "expression": "$AR_H_CHANGE_SEQ",
+            "data-type": {
+                "type": "string",
+                "length": 50
+            }
+          }
+        ]
+      }
+              
