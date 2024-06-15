@@ -1,2 +1,2 @@
 CREATE DATABASE northwind;
-CREATE EXTENTION pglogical;
+CREATE EXTENSION pglogical;
