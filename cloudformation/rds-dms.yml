@@ -22,7 +22,7 @@ Parameters:
 
 Resources:
 
-  RDSCluster:
+  DatabaseCluster:
     Type: 'AWS::RDS::DBCluster'
     Properties:
       MasterUsername:
@@ -43,7 +43,7 @@ Resources:
       DBClusterParameterGroupName:
         Ref: RDSDBClusterParameterGroup
 
-  DatabaseInstance1:
+  DatabaseInstance:
     Type: AWS::RDS::DBInstance
     Properties:
       DBClusterIdentifier: !Ref DatabaseCluster
