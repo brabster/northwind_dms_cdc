@@ -1,0 +1,263 @@
+AWSTemplateFormatVersion: '2010-09-09'
+
+Parameters:
+
+  Username:
+    NoEcho: 'true'
+    Description: Username for database access
+    Type: String
+    MinLength: '1'
+    MaxLength: '16'
+    AllowedPattern: '[a-zA-Z][a-zA-Z0-9]*'
+    ConstraintDescription: must begin with a letter and contain only alphanumeric characters.
+
+  Password:
+    NoEcho: 'true'
+    Description: Password for database access
+    Type: String
+    MinLength: '8'
+    MaxLength: '41'
+    AllowedPattern: '[a-zA-Z0-9]*'
+    ConstraintDescription: must contain only alphanumeric characters.
+
+Resources:
+
+  DmsVpcRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: dms-vpc-role
+      Description: Must exist and be called this name for DMS to work https://docs.aws.amazon.com/managedservices/latest/ctref/deployment-advanced-database-migration-service-dms-create-replication-subnet-group.html
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - dms.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/service-role/AmazonDMSVPCManagementRole
+   
+
+  DatabaseCluster:
+    Type: AWS::RDS::DBCluster
+    Properties:
+      MasterUsername:
+        Ref: Username
+      MasterUserPassword:
+        Ref: Password
+      Engine: aurora-postgresql
+      EngineVersion: 15.6
+      Port: 5432
+      EnableHttpEndpoint: true
+      DBSubnetGroupName: !Ref DatabaseSubnetGroup
+      VpcSecurityGroupIds:
+        - !Ref DatabaseSecurityGroup
+      ServerlessV2ScalingConfiguration:
+        MinCapacity: 1
+        MaxCapacity: 2
+
+      DBClusterParameterGroupName:
+        Ref: RDSDBClusterParameterGroup
+
+  DatabaseInstance:
+    Type: AWS::RDS::DBInstance
+    Properties:
+      DBClusterIdentifier: !Ref DatabaseCluster
+      Engine: aurora-postgresql
+      DBInstanceClass: db.serverless
+      AvailabilityZone: us-east-1a
+  
+  RDSDBClusterParameterGroup:
+    Type: AWS::RDS::DBClusterParameterGroup
+    Properties:
+      Description: Parameter Group for DMS
+      Family: aurora-postgresql15
+      Parameters:
+         rds.logical_replication: 1
+         wal_sender_timeout: 0
+         shared_preload_libraries: pg_stat_statements,pglogical
+
+  DatabaseVPC:
+    Type: AWS::EC2::VPC
+    DependsOn: DmsVpcRole
+    Properties:
+      CidrBlock: 10.0.0.0/16
+      EnableDnsSupport: 'true'
+      EnableDnsHostnames: 'true'
+  
+  DatabaseVPCRouteTable:
+    Type: AWS::EC2::RouteTable
+    Properties:
+      VpcId: !Ref DatabaseVPC
+  
+  DatabaseSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: For RDS-DMS and Query Editor
+      VpcId: !Ref DatabaseVPC
+
+  DatabaseSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId: !Ref DatabaseSecurityGroup
+      IpProtocol: -1
+      SourceSecurityGroupId: !Ref DatabaseSecurityGroup
+
+  DatabaseSecurityGroupEgress:
+    Type: AWS::EC2::SecurityGroupEgress
+    Properties:
+      GroupId: !Ref DatabaseSecurityGroup
+      IpProtocol: -1
+      CidrIp: 0.0.0.0/0
+        
+  DatabaseSubnet1:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref DatabaseVPC
+      CidrBlock: 10.0.0.0/24
+      AvailabilityZone: us-east-1a
+  
+  DatabaseSubnet1RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref DatabaseVPCRouteTable
+      SubnetId: !Ref DatabaseSubnet1
+  
+  DatabaseSubnet2:
+    Type: AWS::EC2::Subnet
+    Properties:
+      VpcId: !Ref DatabaseVPC
+      CidrBlock: 10.0.1.0/24
+      AvailabilityZone: us-east-1b
+  
+  DatabaseSubnet2RouteTableAssociation:
+    Type: AWS::EC2::SubnetRouteTableAssociation
+    Properties:
+      RouteTableId: !Ref DatabaseVPCRouteTable
+      SubnetId: !Ref DatabaseSubnet2
+
+  DatabaseSubnetGroup:
+    Type: AWS::RDS::DBSubnetGroup
+    Properties:
+      DBSubnetGroupDescription: RDS-DMS
+      SubnetIds:
+        - !Ref DatabaseSubnet1
+        - !Ref DatabaseSubnet2
+  
+  DmsSourceEndpoint:
+    Type: AWS::DMS::Endpoint
+    Properties: 
+      DatabaseName: northwind
+      EndpointType: source
+      EngineName: aurora-postgresql
+      Username: !Ref Username
+      Password: !Ref Password
+      Port: !GetAtt DatabaseInstance.Endpoint.Port
+      ServerName: !GetAtt DatabaseInstance.Endpoint.Address
+
+  S3VpcEndpoint:
+    Type: AWS::EC2::VPCEndpoint
+    Properties:
+      VpcEndpointType: Gateway
+      ServiceName: com.amazonaws.us-east-1.s3
+      VpcId: !Ref DatabaseVPC
+      RouteTableIds:
+        - !Ref DatabaseVPCRouteTable
+
+  DmsS3Target:
+    Type: AWS::S3::Bucket
+
+  DmsTargetRole:
+    Type: AWS::IAM::Role
+    Properties:
+      Description: DMS access to S3 target bucket
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - dms.us-east-1.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      Policies: 
+        - PolicyName: bucket
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action: s3:*
+                Resource: !GetAtt DmsS3Target.Arn
+              - Effect: Allow
+                Action: s3:*
+                Resource: !Join ['/', [!GetAtt DmsS3Target.Arn, '*']]
+      
+  DmsTargetEndpoint:
+    Type: AWS::DMS::Endpoint
+    Properties:
+      EndpointType: target
+      EngineName: s3
+      S3Settings:
+        ServiceAccessRoleArn: !GetAtt DmsTargetRole.Arn
+        BucketName: !Ref DmsS3Target
+        BucketFolder: cdc
+        IncludeOpForFullLoad: true
+        TimestampColumnName: transaction_commit_timestamp
+
+  ReplicationSubnetGroup:
+    Type: AWS::DMS::ReplicationSubnetGroup
+    Properties: 
+      ReplicationSubnetGroupDescription: rds-dms
+      SubnetIds: 
+        - !Ref DatabaseSubnet1
+        - !Ref DatabaseSubnet2
+
+  ReplicationConfig:
+    Type: AWS::DMS::ReplicationConfig
+    Properties:
+      ComputeConfig: 
+          MaxCapacityUnits: 1
+          MinCapacityUnits: 1
+          MultiAZ: 'false'
+          ReplicationSubnetGroupId: !Ref ReplicationSubnetGroup
+          VpcSecurityGroupIds: 
+            - !Ref DatabaseSecurityGroup
+      ReplicationConfigIdentifier: rds-dms
+      ReplicationType: full-load-and-cdc
+      SourceEndpointArn: !Ref DmsSourceEndpoint
+      TargetEndpointArn: !Ref DmsTargetEndpoint
+      TableMappings: {
+        "rules": [
+          {
+            "rule-type": "selection",
+            "rule-id": "1",
+            "rule-name": "1",
+            "object-locator": {
+              "schema-name": "public",
+              "table-name": "%"
+            },
+            "rule-action": "include",
+            "filters": []
+          },
+          {
+            "rule-type": "transformation",
+            "rule-id": "2",
+            "rule-name": "2",
+            "rule-target": "column",
+            "object-locator": {
+                "schema-name": "%",
+                "table-name": "%"
+            },
+            "rule-action": "add-column",
+            "value": "transaction_sequence_number",
+            "expression": "$AR_H_CHANGE_SEQ",
+            "data-type": {
+                "type": "string",
+                "length": 50
+            }
+          }
+        ]
+      }
+              
