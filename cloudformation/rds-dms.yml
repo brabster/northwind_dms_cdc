@@ -70,7 +70,7 @@ Resources:
       AvailabilityZone: us-east-1a
   
   RDSDBClusterParameterGroup:
-    Type: 'AWS::RDS::DBClusterParameterGroup'
+    Type: AWS::RDS::DBClusterParameterGroup
     Properties:
       Description: Parameter Group for DMS
       Family: aurora-postgresql15
@@ -81,6 +81,7 @@ Resources:
 
   DatabaseVPC:
     Type: AWS::EC2::VPC
+    DependsOn: DmsVpcRole
     Properties:
       CidrBlock: 10.0.0.0/16
       EnableDnsSupport: 'true'
@@ -189,6 +190,9 @@ Resources:
               - Effect: Allow
                 Action: s3:*
                 Resource: !GetAtt DmsS3Target.Arn
+              - Effect: Allow
+                Action: s3:*
+                Resource: !Join ['/', [!GetAtt DmsS3Target.Arn, '*']]
       
   DmsTargetEndpoint:
     Type: AWS::DMS::Endpoint
