@@ -1,14 +1,19 @@
 Resources supporting my series on CDC with AWS DMS.
 
-## [cloudformation](cloudformation)
+## CDC Dataset: [cdc](cdc)
+
+Want to get hands on with CDC output? This directory contains the complete CSV dataset produced when I ran the example transactions are run through an instance of the CDC pipeline described by this repository.
+
+## Setup CDC Pipeline: [cloudformation](cloudformation)
 
 Cloudformation templates and bootstrapping resources to set up a minimal RDS (Aurora PostgreSQL Serverless) instance and a DMS full load with CDC replication to an S3 bucket.
-Instructions in the [README](cloudformation/README.md),
+Instructions in the [README](cloudformation/README.md).
 
-## [cdc](cdc)
+## Setup Athena Analytics: [athena](athena)
 
-Complete CSV dataset produced when:
+Athena SQL queries to create external table resources over `orders` and `order_details` CDC output.
 
-- the cloudformation stack above is used to create and configure an RDS and DMS pipeline.
-- a sequence of transactions is executed following the bootstrap.
+## Example Transactions: [transactions](transactions)
+
+Example transactions used in the series to illustrate various aspects of CDC behaviour.
 
