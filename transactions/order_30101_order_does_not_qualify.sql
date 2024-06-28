@@ -18,3 +18,8 @@ BEGIN;
 -- user sets the shipped_date - order does not qualify for promotion
 UPDATE orders SET shipped_date = '1996-08-01' WHERE order_id = 30101;
 COMMIT;
+
+BEGIN;
+-- user updates the shipped_date - order does not qualify for promotion
+UPDATE orders SET shipped_date = '1996-08-02' WHERE order_id = 30101;
+COMMIT;
