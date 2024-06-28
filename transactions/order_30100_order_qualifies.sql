@@ -13,3 +13,8 @@ BEGIN;
 -- user sets the shipped_date - order qualifies for promotion
 UPDATE orders SET shipped_date = '1996-08-01' WHERE order_id = 30100;
 COMMIT;
+
+BEGIN;
+-- user updates employee_id
+UPDATE orders SET employee_id = 4 WHERE order_id = 30100;
+COMMIT;
