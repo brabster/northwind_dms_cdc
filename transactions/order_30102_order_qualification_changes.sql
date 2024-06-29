@@ -15,6 +15,6 @@ UPDATE orders SET required_date = '1996-08-25' WHERE order_id = 30102;
 COMMIT;
 
 BEGIN;
--- user updates the shipped_date - order does not qualify for promotion
+-- user updates irrelevant field - still qualifies for promotion
 UPDATE orders SET employee_id = 4 WHERE order_id = 30102;
 COMMIT;
