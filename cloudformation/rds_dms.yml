@@ -228,36 +228,39 @@ Resources:
       ReplicationType: full-load-and-cdc
       SourceEndpointArn: !Ref DmsSourceEndpoint
       TargetEndpointArn: !Ref DmsTargetEndpoint
-      TableMappings: {
-        "rules": [
-          {
-            "rule-type": "selection",
-            "rule-id": "1",
-            "rule-name": "1",
-            "object-locator": {
-              "schema-name": "public",
-              "table-name": "%"
-            },
-            "rule-action": "include",
-            "filters": []
-          },
-          {
-            "rule-type": "transformation",
-            "rule-id": "2",
-            "rule-name": "2",
-            "rule-target": "column",
-            "object-locator": {
-                "schema-name": "%",
-                "table-name": "%"
-            },
-            "rule-action": "add-column",
-            "value": "transaction_sequence_number",
-            "expression": "$AR_H_CHANGE_SEQ",
-            "data-type": {
-                "type": "string",
-                "length": 50
-            }
-          }
-        ]
-      }
+      TableMappings:
+        rules:
+          - rule-type: selection
+            rule-id: '1'
+            rule-name: include_all_source_columns
+            object-locator: 
+              schema-name: public
+              table-name: '%'
+            rule-action: include
+
+          - rule-type: transformation
+            rule-id: '2'
+            rule-name: record_transaction_sequence_number
+            rule-target: column
+            object-locator:
+              schema-name: public
+              table-name: '%'
+            rule-action: add-column
+            value: transaction_sequence_number
+            expression: $AR_H_CHANGE_SEQ
+            data-type:
+              type: string
+              length: 50
+          - rule-type: transformation
+            rule-id: '3'
+            rule-name: record_previous_pk_values_on_update
+            rule-target: column
+            object-locator:
+              schema-name: public
+              table-name: '%'
+            rule-action: add-before-image-columns
+            before-image-def:
+              column-prefix: before_
+              column-suffix: ''
+              column-filter: pk-only
               

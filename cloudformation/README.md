@@ -1,4 +1,4 @@
-- copy the CloudFormation template into your own bucket
+- copy the [CloudFormation template](./rds_dms.yml) into your own bucket
 - create a stack based on that template, setting database admin username and password parameters
 - when the stack is created, start Query Editor in the `postgres` database and execute the statements in [the prep script](rds_prep_db-sql)
 - switch the Query Editor database to `northwind`
