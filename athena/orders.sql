@@ -16,7 +16,7 @@ CREATE EXTERNAL TABLE northwind_cdc.orders (
     ship_postal_code STRING,
     ship_country STRING,
     transaction_sequence_number STRING,
-    before_order_id string
+    before_order_id STRING
 )
 ROW FORMAT SERDE 'org.apache.hadoop.hive.serde2.OpenCSVSerde'
 LOCATION 's3://your-target-bucket/cdc/public/orders/'
