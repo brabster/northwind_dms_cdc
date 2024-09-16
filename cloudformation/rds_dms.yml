@@ -20,6 +20,21 @@ Parameters:
     AllowedPattern: '[a-zA-Z0-9]*'
     ConstraintDescription: must contain only alphanumeric characters.
 
+  IncludeDms:
+    Description: Whether to create the DMS pipeline
+    Default: 'true'
+    Type: String
+    AllowedValues:
+      - 'true'
+      - 'false'
+    ConstraintDescription: true or false
+
+Conditions:
+  CreateDmsResources:
+    Fn::Equals:
+      - !Ref IncludeDms
+      - 'true'
+
 Resources:
 
   DmsVpcRole:
@@ -148,6 +163,7 @@ Resources:
   
   DmsSourceEndpoint:
     Type: AWS::DMS::Endpoint
+    Condition: CreateDmsResources
     Properties: 
       DatabaseName: northwind
       EndpointType: source
@@ -159,6 +175,7 @@ Resources:
 
   S3VpcEndpoint:
     Type: AWS::EC2::VPCEndpoint
+    Condition: CreateDmsResources
     Properties:
       VpcEndpointType: Gateway
       ServiceName: com.amazonaws.us-east-1.s3
@@ -171,6 +188,7 @@ Resources:
 
   DmsTargetRole:
     Type: AWS::IAM::Role
+    Condition: CreateDmsResources
     Properties:
       Description: DMS access to S3 target bucket
       AssumeRolePolicyDocument:
@@ -196,6 +214,7 @@ Resources:
       
   DmsTargetEndpoint:
     Type: AWS::DMS::Endpoint
+    Condition: CreateDmsResources
     Properties:
       EndpointType: target
       EngineName: s3
@@ -207,6 +226,7 @@ Resources:
         TimestampColumnName: transaction_commit_timestamp
 
   ReplicationSubnetGroup:
+    Condition: CreateDmsResources
     Type: AWS::DMS::ReplicationSubnetGroup
     Properties: 
       ReplicationSubnetGroupDescription: rds-dms
@@ -215,6 +235,7 @@ Resources:
         - !Ref DatabaseSubnet2
 
   ReplicationConfig:
+    Condition: CreateDmsResources
     Type: AWS::DMS::ReplicationConfig
     Properties:
       ComputeConfig: 
